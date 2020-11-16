@@ -11,7 +11,39 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm_notebook as tqdm
 import os
 from glob import glob
+import librosa
+from torchvision.models import resnet34
 
+def get_melspectrogram_db(file_path, sr=None, n_fft=2048, hop_length=512, n_mels=128, fmin=20, fmax=8300, top_db=80):
+    wav,sr = librosa.load(file_path,sr=sr)
+    if wav.shape[0]<5*sr:
+        wav = np.pad(wav,int(np.ceil((5*sr-wav.shape[0])/2)),mode='reflect')
+    else:
+        wav=wav[:5*sr]
+        spec=librosa.feature.melspectrogram(wav, sr=sr, n_fft=n_fft,hop_length=hop_length,n_mels=n_mels,fmin=fmin,fmax=fmax)
+        spec_db=librosa.power_to_db(spec,top_db=top_db)
+    return spec_db
+
+def spec_to_image(spec, eps=1e-6):
+    mean = spec.mean()
+    std = spec.std()
+    spec_norm = (spec - mean) / (std + eps)
+    spec_min, spec_max = spec_norm.min(), spec_norm.max()
+    spec_scaled = 255 * (spec_norm - spec_min) / (spec_max - spec_min)
+    spec_scaled = spec_scaled.astype(np.uint8)
+    return spec_scaled
+
+def setlr(optimizer, lr):
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+    return optimizer
+
+def lr_decay(optimizer, epoch):
+    if epoch%20==0:
+        new_lr = learning_rate / (10**(epoch//20))
+        optimizer = setlr(optimizer, new_lr)
+        print(f'Changed learning rate to {new_lr}')
+    return optimizer
 
 
 class Data(Dataset):
@@ -20,7 +52,7 @@ class Data(Dataset):
         self.data = []
         self.labels = []
         self.wavs_path = wavs_path
-        self.n_fft= int(1024)
+        self.n_fft= int(4096)
         self.hop_length= int(self.n_fft/4) #
         self.top_db = 80
         self.fmin = 20
@@ -57,7 +89,7 @@ class Data(Dataset):
     def __getitem__(self, idx):
         return self.data[idx], self.labels[idx]
     
-    def spec_to_image(self, spec, eps=1e-6):
+    def spec_to_image(spec, eps=1e-6):
         mean = spec.mean()
         std = spec.std()
         spec_norm = (spec - mean) / (std + eps)
@@ -66,66 +98,26 @@ class Data(Dataset):
         spec_scaled = spec_scaled.astype(np.uint8)
         return spec_scaled
 
-class Model(nn.Module):
-    def __init__(self, input_shape, batch_size=16, num_category=20):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size = 3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.conv2 = nn.Conv2d(32, 32, kernel_size = 3, stride=1, padding=1)
-        self.bn2 = nn.BatchNorm2d(32)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.bn3 = nn.BatchNorm2d(64)
-        self.conv4 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn4 = nn.BatchNorm2d(64)
-        self.conv5 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
-        self.bn5 = nn.BatchNorm2d(128)
-        self.conv6 = nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1)
-        self.bn6 = nn.BatchNorm2d(128)
-        self.conv7 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
-        self.bn7 = nn.BatchNorm2d(256)
-        self.conv8 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
-        self.bn8 = nn.BatchNorm2d(256)
-        self.dense1 = nn.Linear(256*(((input_shape[1]//2)//2)//2)*(((input_shape[2]//2)//2)//2),500)
-        self.dropout = nn.Dropout(0.5)
-        self.dense2 = nn.Linear(500, num_category)
-    def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(self.bn1(x))
-        x = self.conv2(x)
-        x = F.relu(self.bn2(x))
-        x = F.max_pool2d(x, kernel_size=2) 
-        x = self.conv3(x)
-        x = F.relu(self.bn3(x))
-        x = self.conv4(x)
-        x = F.relu(self.bn4(x))
-        x = F.max_pool2d(x, kernel_size=2)
-        x = self.conv5(x)
-        x = F.relu(self.bn5(x))
-        x = self.conv6(x)
-        x = F.relu(self.bn6(x))
-        x = F.max_pool2d(x, kernel_size=2)
-        x = self.conv7(x)
-        x = F.relu(self.bn7(x))
-        x = self.conv8(x)
-        x = F.relu(self.bn8(x))
-        x = x.view(x.size(0),-1)
-        x = F.relu(self.dense1(x))
-        x = self.dropout(x)
-        x = self.dense2(x)
-        return x 
+if torch.cuda.is_available():
+    device=torch.device('cuda:0')
+else:
+    device=torch.device('cpu')
 
-def setlr(optimizer, lr):
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
-    return optimizer 
 
-def lr_decay(optimizer, epoch):
-    if epoch%20==0:
-        new_lr = learning_rate / (10**(epoch//20))
-        optimizer = setlr(optimizer, new_lr)
-        print(f'Changed learning rate to {new_lr}')
-    return optimizer
+resnet_model = resnet34(pretrained = True)
+resnet_model.fc = nn.Linear(512, 20)
+resnet_model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+resnet_model = resnet_model.to(device)
 
+wavs_path = glob(os.path.join('/home/lab/Documents/Human/Elevator_Sound_Classification/Record', '*', '*'))
+train_data = Data(wavs_path)
+train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
+
+loss_fn = nn.CrossEntropyLoss()
+learning_rate = 2e-5
+optimizer = optim.Adam(resnet_model.parameters(), lr=learning_rate)
+epochs = 60
+train_losses = []
 
 def train(model, loss_fn, train_loader, epochs, optimizer, train_losses, change_lr=None):
     for epoch in tqdm(range(1,epochs+1)):
@@ -139,7 +131,6 @@ def train(model, loss_fn, train_loader, epochs, optimizer, train_losses, change_
             x, y = data
           
             batch, height, width = x.size()
-            #print(height, width)
             x = x.view(batch, 1, height, width)
             optimizer.zero_grad()
             x = x.to(device, dtype=torch.float32)
@@ -162,28 +153,38 @@ def train(model, loss_fn, train_loader, epochs, optimizer, train_losses, change_
         print("epoch: {}, correct: {}/{} ({:.0f}%)".format(epoch, correct, len(train_data), percent))
 
 
-wavs_path = glob(os.path.join('/home/lab/Documents/Human/Elevator_Sound_Classification/Record', '*', '*'))
-train_data = Data(wavs_path)
+train(resnet_model, loss_fn, train_loader, epochs, optimizer, train_losses, lr_decay)
 
-train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
+wavs_path = glob(os.path.join('/home/lab/Documents/Human/Elevator_Sound_Classification/Test', '*', '*'))
+test_data = Data(wavs_path)
 
-if torch.cuda.is_available():
-    device=torch.device('cuda:1')
-else:
-    device=torch.device('cpu')
+test_loader = DataLoader(test_data, batch_size=16, shuffle=True)
 
-shape = train_data.__getitem__(0)[0].shape
-model = Model(input_shape=(1,shape[0],shape[1]), batch_size=16, num_category=20).to(device)
+resnet_model.eval()
+count = 0
+for i, data in enumerate(test_loader):
+    x, y = data
+    batch, height, width = x.size()
+    x = x.view(batch, 1, height, width)
+    x = x.to(device, dtype=torch.float32)
+    y = y.to(device, dtype=torch.long)
+    y_hat = resnet_model(x)
+    
+    
+
+    for b in range(batch):
+        pred = (torch.argmax(y_hat[b]) +1).item()
+        ground_truth = y[b].item()  
+        if ground_truth!= pred:
+            print("ground truth:",ground_truth, 'prediction:',pred )
+            count +=1
+            
+print("error count", count)
 
 
 
-loss_fn = nn.CrossEntropyLoss()
-learning_rate = 2e-5
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-epochs = 60
-train_losses = []
 
-train(model, loss_fn, train_loader, epochs, optimizer, train_losses, lr_decay)
 
+      
           
         
