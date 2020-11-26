@@ -9,7 +9,7 @@ fail_list = ['Abishini A.H..', 'Craig Emmington','Guilherme Vieira de Araújo', 
 
 ######################################################## pitch ########################################################
 for dir_num in range(1, 21):
-    path_dir = '/home/lab/Documents/Human/Elevator_Sound_Classification/Record/' + dir_num + '/'
+    path_dir = '/home/lab/Documents/Human/Elevator_Sound_Classification/Record/' + str(dir_num) + '/'
     #path_dir = './thirteenthFloor/'
     file_list = os.listdir(path_dir)
     for file in file_list:
