@@ -29,6 +29,7 @@ class Data(Dataset):
        
         
         for path in tqdm(self.wavs_path):
+            print(path)
             self.labels.append(int(path.split('/')[-2]))
             
             wav, sr = librosa.load(path)
@@ -49,7 +50,7 @@ class Data(Dataset):
                 
             spec=librosa.feature.melspectrogram(wav_cut, sr=self.sr, n_fft=self.n_fft,hop_length=self.hop_length, fmin=self.fmin, fmax=self.fmax)
             spec_db=librosa.power_to_db(spec,top_db=self.top_db)
-            self.data.append(spec_to_image(spec_db))
+            self.data.append(self.spec_to_image(spec_db))
             
     def __len__(self):
         return len(self.data)
@@ -161,6 +162,12 @@ def train(model, loss_fn, train_loader, epochs, optimizer, train_losses, change_
         percent = 100. * correct / len(train_data)
         print("epoch: {}, correct: {}/{} ({:.0f}%)".format(epoch, correct, len(train_data), percent))
 
+    PATH = os.path.join(os.path.abspath('.'), 'parameters.pth')
+    torch.save({
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            }, PATH)
+
 
 wavs_path = glob(os.path.join('/home/lab/Documents/Human/Elevator_Sound_Classification/Record', '*', '*'))
 train_data = Data(wavs_path)
@@ -168,7 +175,7 @@ train_data = Data(wavs_path)
 train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
 
 if torch.cuda.is_available():
-    device=torch.device('cuda:1')
+    device=torch.device('cuda:0')
 else:
     device=torch.device('cpu')
 
