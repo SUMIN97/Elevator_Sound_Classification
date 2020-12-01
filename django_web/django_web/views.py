@@ -8,13 +8,14 @@ from glob import glob
 from .library import *
 from .module import TestData, Model
 
+
+
 folder_path = os.path.join(settings.BASE_DIR, 'uploads')
 paramer_path = os.path.join(settings.BASE_DIR, 'parameters', 'parameters.pth')
-# if torch.cuda.is_available():
-#     device=torch.device('cuda:0')
-# else:
-#     device=torch.device('cpu')
-
+if torch.cuda.is_available():
+    device=torch.device('cuda:0')
+else:
+    device=torch.device('cpu')
 
 def index(request):
     return render(request, 'index.html');
@@ -23,7 +24,6 @@ def index(request):
 def upload(request):
     try:
         filename = str(uuid.uuid4())
-     
         with open(os.path.join(folder_path, filename + '_' + request.FILES['file'].name), 'wb+') as destination:
             for chunk in request.FILES['file'].chunks():
                 destination.write(chunk)
@@ -49,25 +49,21 @@ def execute(request):
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     checkpoint = torch.load(paramer_path)
-    model.load_state_dict(checkpoint['model_state_dict']).cpu()
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict']).cpu()
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
     model.eval()
+    model.to(device)
     count = 0
     pred = []
     for i, data in enumerate(test_loader):
-        x, y = data
+        x = data
         batch, height, width = x.size()
         x = x.view(batch, 1, height, width)
-        # x = x.to(device, dtype=torch.float32)
-        # y = y.to(device, dtype=torch.long)
+        x = x.to(device, dtype=torch.float32)
         y_hat = model(x)
-        
-        pred.append((torch.argmax(y_hat[b]) +1).item())
+
+        for b in range(batch):
+            pred.append((torch.argmax(y_hat[b]) +1).item())
+            
     return HttpResponse(pred)
-    
-
-
-    
-
-
