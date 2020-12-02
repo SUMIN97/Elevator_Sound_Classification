@@ -7,8 +7,7 @@ import os
 from glob import glob
 from .library import *
 from .module import TestData, Model
-
-
+import json
 
 folder_path = os.path.join(settings.BASE_DIR, 'uploads')
 paramer_path = os.path.join(settings.BASE_DIR, 'parameters', 'parameters.pth')
@@ -34,11 +33,10 @@ def upload(request):
 @require_http_methods(["POST"])
 def execute(request):
     wavs_path = glob(os.path.join(folder_path, '*'))
-    
 
     test_data = TestData(wavs_path)
     n_test_data = test_data.__len__()
-    test_loader = DataLoader(test_data, batch_size=n_test_data, shuffle=True)
+    test_loader = DataLoader(test_data, batch_size=n_test_data, shuffle=False)
 
     shape = test_data.__getitem__(0).shape
     # print(shape)
@@ -64,6 +62,10 @@ def execute(request):
         y_hat = model(x)
 
         for b in range(batch):
-            pred.append((torch.argmax(y_hat[b]) +1).item())
+            path = wavs_path[b].split('/')[-1].split('_')[1:]
+            str_path = path[0] + '_' + path[1]
             
-    return HttpResponse(pred)
+            pred.append({'result':(torch.argmax(y_hat[b]) +1).item(),'path':str_path})
+            
+    return HttpResponse(json.dumps(pred))
+

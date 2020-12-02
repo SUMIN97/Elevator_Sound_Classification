@@ -16,9 +16,15 @@ Including another URLconf
 
 from . import views
 from django.urls import path
+from django.contrib import admin
+from django.urls import path
+from django.conf.urls.static import static
+from django.conf import settings
 
 urlpatterns = [
     path('', views.index, name='index'),
     path('upload', views.upload, name='upload'),
     path('execute', views.execute, name='execute')
 ]
+
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

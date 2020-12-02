@@ -2,7 +2,7 @@
 <html>
     <head>
         <meta charset="utf-8"/>
-        <title>제목</title>
+        <title>Voice Recognition</title>
         <style>
             form#form { 
                 display: block;
@@ -18,13 +18,15 @@
         </style>
     </head>
     <body>
-        <form id="form" enctype="multipart/form-data">
+    <center>
+            <img src="/static/img/title.jpg">
+                <form id="form" enctype="multipart/form-data">
             <input name="file" type="file" required accept=".wav"/>
             <button type="submit">업로드</button>
         </form>
         <button id="execute">실행</button>
-        <div id="result"></div>
 
+    <div id="result"></div>
         <script type="application/javascript">
             (() => {
                 const form = document.getElementById('form');
@@ -51,12 +53,18 @@
                 const execute = document.getElementById('execute');
                 const result = document.getElementById('result');
 
+
                 execute.addEventListener('click', () => {
                     const xhr = new XMLHttpRequest();
                     xhr.onreadystatechange = () => {
                         if (xhr.readyState === xhr.DONE) {
                             if (xhr.status === 200) {
-                                result.innerText = `결과: ${xhr.responseText}`;
+                                    const a = JSON.parse(xhr.responseText);
+                                    result.innerHTML = '';
+                                    for(let i=0;i<a.length;i++){
+                                        result.innerHTML += `<div>${a[i].path}</div>`;
+                                        result.innerHTML += `<img src = "/static/img/${a[i].result}.jpg"/>`;
+                                    }
                             }
                             else 
                                 alert('실행에 실패했습니다.');
@@ -70,5 +78,6 @@
             })();
 
         </script>
+    </center>
     </body>
 </html>

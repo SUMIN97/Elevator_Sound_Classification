@@ -120,13 +120,14 @@ epochs = 60
 train_losses = []
 
 def train(model, loss_fn, train_loader, epochs, optimizer, train_losses, change_lr=None):
-    for epoch in tqdm(range(1,epochs+1)):
+    for epoch in range(1,epochs+1):
+        print(epoch)
         model.train()
         batch_losses=[]
         correct = 0
         if change_lr:
             optimizer = change_lr(optimizer, epoch)
-        for i, data in enumerate(train_loader):
+        for i, data in enumerate(tqdm(train_loader)):
             
             x, y = data
           
@@ -154,6 +155,11 @@ def train(model, loss_fn, train_loader, epochs, optimizer, train_losses, change_
 
 
 train(resnet_model, loss_fn, train_loader, epochs, optimizer, train_losses, lr_decay)
+PATH = os.path.join(os.path.abspath('.'), 'resnet_parameters.pth')
+torch.save({
+    'model_state_dict': resnet_model.state_dict(),
+    'optimizer_state_dict': optimizer.state_dict(),
+}, PATH)
 
 wavs_path = glob(os.path.join('/home/lab/Documents/Human/Elevator_Sound_Classification/Test', '*', '*'))
 test_data = Data(wavs_path)
